@@ -160,6 +160,31 @@
     RVTEST_SIGUPD_V(AVL, SEW, VD)                                       \
 1:                                                                      \
 
+// TEST_CASE_VVR_W() runs a single vector instruction test.
+// The instruction has the following form:
+//   VINST VD, VS2, RS1
+// Steps are:
+//   - Configures vector registers:
+//     AVL (application vector length - number of elements) (0..31)
+//     MA=1 (mask agnostic)
+//     TA=1 (tail agnostic)
+//     SEW (set element width) (8, 16, 32, 64)
+//     OSEW (output set element width) (8, 16, 32, 64)
+//     LMUL=1 (vector register group multiplier)
+//   - Load data from provided offset into VS2 and VS1
+//   - Perform VINST VD, VS2, RS1, RM
+//   - Append result into signature
+#define TEST_CASE_VVR_W(AVL, SEW, OSEW, VINST, VD, VS2, DOFF2, RS1, DOFF1) \
+    TEST_CASE_CHECK_VLENB(AVL, SEW, 1f) ;                               \
+    vsetivli x0, AVL, e ## SEW, m1, ta, ma ;                            \
+    addi HELPER_GPR, DATA_BASE, DOFF2 ;                                 \
+    VLE(SEW) VS2, (HELPER_GPR) ;                                        \
+    addi HELPER_GPR, DATA_BASE, DOFF1 ;                                 \
+    LREG RS1, (HELPER_GPR) ;                                            \
+    VINST VD, VS2, RS1 ;                                                \
+    RVTEST_SIGUPD_V(AVL, OSEW, VD)                                       \
+1:                                                                      \
+
 // TEST_CASE_VVR() runs a single vector instruction test.
 // The instruction has the following form:
 //   VINST VD, VS2, RS1
@@ -173,15 +198,34 @@
 //   - Load data from provided offset into VS2 and VS1
 //   - Perform VINST VD, VS2, RS1, RM
 //   - Append result into signature
-#define TEST_CASE_VVR(AVL, SEW, VINST, VD, VS2, DOFF2, RS1, DOFF1)      \
+#define TEST_CASE_VVR(AVL, SEW, VINST, VD, VS2, DOFF2, RS1, DOFF1)  \
+    TEST_CASE_VVR_W(AVL, SEW, SEW, VINST, VD, VS2, DOFF2, RS1, DOFF1)
+
+// TEST_CASE_VVR_M_W() runs a single masked vector instruction test.
+// The instruction has the following form:
+//   VINST VD, VS2, RS1, v0.t
+// Steps are:
+//   - Configures vector registers:
+//     AVL (application vector length - number of elements) (0..31)
+//     MA=1 (mask agnostic)
+//     TA=1 (tail agnostic)
+//     SEW (set element width) (8, 16, 32, 64)
+//     OSEW (output set element width) (8, 16, 32, 64)
+//     LMUL=1 (vector register group multiplier)
+//   - Load data from provided offset into VS2 and VS1
+//   - Clear VD
+//   - Perform VINST VD, VS2, RS1, RM
+//   - Append result into signature
+#define TEST_CASE_VVR_M_W(AVL, SEW, OSEW, VINST, VD, VS2, DOFF2, RS1, DOFF1) \
     TEST_CASE_CHECK_VLENB(AVL, SEW, 1f) ;                               \
     vsetivli x0, AVL, e ## SEW, m1, ta, ma ;                            \
     addi HELPER_GPR, DATA_BASE, DOFF2 ;                                 \
     VLE(SEW) VS2, (HELPER_GPR) ;                                        \
     addi HELPER_GPR, DATA_BASE, DOFF1 ;                                 \
     LREG RS1, (HELPER_GPR) ;                                            \
-    VINST VD, VS2, RS1 ;                                                \
-    RVTEST_SIGUPD_V(AVL, SEW, VD)                                       \
+    vxor.vv VD, VD, VD ;                                                \
+    VINST VD, VS2, RS1, v0.t ;                                          \
+    RVTEST_SIGUPD_V(AVL, OSEW, VD)                                       \
 1:                                                                      \
 
 // TEST_CASE_VVR_M() runs a single masked vector instruction test.
@@ -199,15 +243,29 @@
 //   - Perform VINST VD, VS2, RS1, RM
 //   - Append result into signature
 #define TEST_CASE_VVR_M(AVL, SEW, VINST, VD, VS2, DOFF2, RS1, DOFF1)    \
+    TEST_CASE_VVR_M_W(AVL, SEW, SEW, VINST, VD, VS2, DOFF2, RS1, DOFF1)
+
+// TEST_CASE_VVU_W() runs a single vector instruction test.
+// The instruction has the following form:
+//   VINST VD, VS2, UIMM
+// Steps are:
+//   - Configures vector registers:
+//     AVL (application vector length - number of elements) (0..31)
+//     MA=1 (mask agnostic)
+//     TA=1 (tail agnostic)
+//     SEW (set element width) (8, 16, 32, 64)
+//     OSEW (output set element width) (8, 16, 32, 64)
+//     LMUL=1 (vector register group multiplier)
+//   - Load data from provided offset into VS2
+//   - Perform VINST VD, VS2, UIMM
+//   - Append result into signature
+#define TEST_CASE_VVU_W(AVL, SEW, OSEW, VINST, VD, VS2, DOFF2, UIMM)    \
     TEST_CASE_CHECK_VLENB(AVL, SEW, 1f) ;                               \
     vsetivli x0, AVL, e ## SEW, m1, ta, ma ;                            \
     addi HELPER_GPR, DATA_BASE, DOFF2 ;                                 \
     VLE(SEW) VS2, (HELPER_GPR) ;                                        \
-    addi HELPER_GPR, DATA_BASE, DOFF1 ;                                 \
-    LREG RS1, (HELPER_GPR) ;                                            \
-    vxor.vv VD, VD, VD ;                                                \
-    VINST VD, VS2, RS1, v0.t ;                                          \
-    RVTEST_SIGUPD_V(AVL, SEW, VD)                                       \
+    VINST VD, VS2, UIMM ;                                               \
+    RVTEST_SIGUPD_V(AVL, OSEW, VD)                                      \
 1:                                                                      \
 
 // TEST_CASE_VVU() runs a single vector instruction test.
@@ -223,13 +281,32 @@
 //   - Load data from provided offset into VS2
 //   - Perform VINST VD, VS2, UIMM
 //   - Append result into signature
-#define TEST_CASE_VVU(AVL, SEW, VINST, VD, VS2, DOFF2, UIMM)            \
+#define TEST_CASE_VVU(AVL, SEW, VINST, VD, VS2, DOFF2, UIMM)    \
+    TEST_CASE_VVU_W(AVL, SEW, SEW, VINST, VD, VS2, DOFF2, UIMM)
+
+// TEST_CASE_VVU_M_W() runs a single masked vector instruction test.
+// The instruction has the following form:
+//   VINST VD, VS2, UIMM, v0.t
+// Steps are:
+//   - Configures vector registers:
+//     AVL (application vector length - number of elements) (0..31)
+//     MA=1 (mask agnostic)
+//     TA=1 (tail agnostic)
+//     SEW (set element width) (8, 16, 32, 64)
+//     OSEW (output set element width) (8, 16, 32, 64)
+//     LMUL=1 (vector register group multiplier)
+//   - Load data from provided offset into VS2
+//   - Clear VD
+//   - Perform VINST VD, VS2, UIMM
+//   - Append result into signature
+#define TEST_CASE_VVU_M_W(AVL, SEW, OSEW, VINST, VD, VS2, DOFF2, UIMM)    \
     TEST_CASE_CHECK_VLENB(AVL, SEW, 1f) ;                               \
     vsetivli x0, AVL, e ## SEW, m1, ta, ma ;                            \
     addi HELPER_GPR, DATA_BASE, DOFF2 ;                                 \
     VLE(SEW) VS2, (HELPER_GPR) ;                                        \
-    VINST VD, VS2, UIMM ;                                               \
-    RVTEST_SIGUPD_V(AVL, SEW, VD)                                       \
+    vxor.vv VD, VD, VD ;                                                \
+    VINST VD, VS2, UIMM, v0.t ;                                         \
+    RVTEST_SIGUPD_V(AVL, OSEW, VD)                                       \
 1:                                                                      \
 
 // TEST_CASE_VVU_M() runs a single masked vector instruction test.
@@ -246,15 +323,8 @@
 //   - Clear VD
 //   - Perform VINST VD, VS2, UIMM
 //   - Append result into signature
-#define TEST_CASE_VVU_M(AVL, SEW, VINST, VD, VS2, DOFF2, UIMM)          \
-    TEST_CASE_CHECK_VLENB(AVL, SEW, 1f) ;                               \
-    vsetivli x0, AVL, e ## SEW, m1, ta, ma ;                            \
-    addi HELPER_GPR, DATA_BASE, DOFF2 ;                                 \
-    VLE(SEW) VS2, (HELPER_GPR) ;                                        \
-    vxor.vv VD, VD, VD ;                                                \
-    VINST VD, VS2, UIMM, v0.t ;                                         \
-    RVTEST_SIGUPD_V(AVL, SEW, VD)                                       \
-1:                                                                      \
+#define TEST_CASE_VVU_M(AVL, SEW, VINST, VD, VS2, DOFF2, UIMM)  \
+    TEST_CASE_VVU_M_W(AVL, SEW, SEW, VINST, VD, VS2, DOFF2, UIMM)
 
 // TEST_CASE_WVU() runs a single vector instruction test.
 // The instruction has the following form:
@@ -280,6 +350,31 @@
     RVTEST_SIGUPD_V(AVL, SEW, VD)                                       \
 1:                                                                      \
 
+// TEST_CASE_VVV_W() runs a single vector instruction test.
+// The instruction has the following form:
+//   VINST VD, VS2, VS1
+// Steps are:
+//   - Configures vector registers:
+//     AVL (application vector length - number of elements) (0..31)
+//     MA=1 (mask agnostic)
+//     TA=1 (tail agnostic)
+//     SEW (set element width) (8, 16, 32, 64)
+//     OSEW (output set element width) (8, 16, 32, 64)
+//     LMUL=1 (vector register group multiplier)
+//   - Load data from provided offset into VS2 and VS1
+//   - Perform VINST VD, VS2, VS1
+//   - Append result into signature
+#define TEST_CASE_VVV(AVL, SEW, OSEW, VINST, VD, VS2, DOFF2, VS1, DOFF1) \
+    TEST_CASE_CHECK_VLENB(AVL, SEW, 1f) ;                               \
+    vsetivli x0, AVL, e ## SEW, m1, ta, ma ;                            \
+    addi HELPER_GPR, DATA_BASE, DOFF2 ;                                 \
+    VLE(SEW) VS2, (HELPER_GPR) ;                                        \
+    addi HELPER_GPR, DATA_BASE, DOFF1 ;                                 \
+    VLE(SEW) VS1, (HELPER_GPR) ;                                        \
+    VINST VD, VS2, VS1 ;                                                \
+    RVTEST_SIGUPD_V(AVL, OSEW, VD)                                      \
+1:                                                                      \
+
 // TEST_CASE_VVV() runs a single vector instruction test.
 // The instruction has the following form:
 //   VINST VD, VS2, VS1
@@ -293,15 +388,34 @@
 //   - Load data from provided offset into VS2 and VS1
 //   - Perform VINST VD, VS2, VS1
 //   - Append result into signature
-#define TEST_CASE_VVV(AVL, SEW, VINST, VD, VS2, DOFF2, VS1, DOFF1)      \
+#define TEST_CASE_VVV(AVL, SEW, VINST, VD, VS2, DOFF2, VS1, DOFF1)  \
+    TEST_CASE_VVV_W(AVL, SEW, SEW, VINST, VD, VS2, DOFF2, VS1, DOFF1)
+
+// TEST_CASE_VVV_M_W() runs a single masked vector instruction test.
+// The instruction has the following form:
+//   VINST VD, VS2, VS1, v0.t
+// Steps are:
+//   - Configures vector registers:
+//     AVL (application vector length - number of elements) (0..31)
+//     MA=1 (mask agnostic)
+//     TA=1 (tail agnostic)
+//     SEW (set element width) (8, 16, 32, 64)
+//     OSEW (output set element width) (8, 16, 32, 64)
+//     LMUL=1 (vector register group multiplier)
+//   - Load data from provided offset into VS2 and VS1
+//   - Clear VD
+//   - Perform VINST VD, VS2, VS1, RM
+//   - Append result into signature
+#define TEST_CASE_VVV_M_W(AVL, SEW, OSEW, VINST, VD, VS2, DOFF2, VS1, DOFF1) \
     TEST_CASE_CHECK_VLENB(AVL, SEW, 1f) ;                               \
     vsetivli x0, AVL, e ## SEW, m1, ta, ma ;                            \
     addi HELPER_GPR, DATA_BASE, DOFF2 ;                                 \
     VLE(SEW) VS2, (HELPER_GPR) ;                                        \
     addi HELPER_GPR, DATA_BASE, DOFF1 ;                                 \
     VLE(SEW) VS1, (HELPER_GPR) ;                                        \
-    VINST VD, VS2, VS1 ;                                                \
-    RVTEST_SIGUPD_V(AVL, SEW, VD)                                       \
+    vxor.vv VD, VD, VD ;                                                \
+    VINST VD, VS2, VS1, v0.t ;                                          \
+    RVTEST_SIGUPD_V(AVL, OSEW, VD)                                       \
 1:                                                                      \
 
 // TEST_CASE_VVV_M() runs a single masked vector instruction test.
@@ -319,16 +433,7 @@
 //   - Perform VINST VD, VS2, VS1, RM
 //   - Append result into signature
 #define TEST_CASE_VVV_M(AVL, SEW, VINST, VD, VS2, DOFF2, VS1, DOFF1)    \
-    TEST_CASE_CHECK_VLENB(AVL, SEW, 1f) ;                               \
-    vsetivli x0, AVL, e ## SEW, m1, ta, ma ;                            \
-    addi HELPER_GPR, DATA_BASE, DOFF2 ;                                 \
-    VLE(SEW) VS2, (HELPER_GPR) ;                                        \
-    addi HELPER_GPR, DATA_BASE, DOFF1 ;                                 \
-    VLE(SEW) VS1, (HELPER_GPR) ;                                        \
-    vxor.vv VD, VD, VD ;                                                \
-    VINST VD, VS2, VS1, v0.t ;                                          \
-    RVTEST_SIGUPD_V(AVL, SEW, VD)                                       \
-1:                                                                      \
+    TEST_CASE_VVV(AVL, SEW, SEW, VINST, VD, VS2, DOFF2, VS1, DOFF1)
 
 // TEST_CASE_WVV() runs a single vector instruction test.
 // The instruction has the following form:
