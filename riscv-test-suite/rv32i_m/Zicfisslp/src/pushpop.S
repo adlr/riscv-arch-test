@@ -9,7 +9,7 @@
 #include "model_test.h"
 #include "arch_test.h"
 
-RVTEST_ISA("RV32I_Zicfisslp_Zicsr")
+RVTEST_ISA("RV32I_Zicsr") #_Zicfisslp
 
 # Test code region
 .section .text.init
@@ -18,42 +18,30 @@ rvtest_entry_point:
 RVMODEL_BOOT
 RVTEST_CODE_BEGIN
 
-.macro SET csr_num, index, reg, reg2
-    li \reg, 1
-    slli \reg, \reg, \index
-    csrr \reg2, \csr_num
-    or \reg2, \reg2, \reg
-    csrw \csr_num, \reg2
-.endm    
+#define CSR_SSP 0x050
 
-.macro CLEAR csr_num, index, reg, reg2
-    li \reg, 1
-    slli \reg, \reg, \index
-	not \reg, \reg
-    csrr \reg2, \csr_num
-    and \reg2, \reg2, \reg
-    csrw \csr_num, \reg2
-.endm    
+#define REG_T0 5
+#define REG_T1 6
+#define REG_T2 7
 
-.macro ASSIGN_BIT csr_num, index, imm, reg, reg2
-    .if ( \imm == 1 )
-    SET \csr_num, \index, \reg, \reg2
-    .else
-    CLEAR \csr_num, \index, \reg, \reg2
-    .endif
-.endm
+#define SSLOAD_X1   .word 0b10000001110000000100000011110011
+#define SSLOAD_X5   .word 0b10000001110000000100001011110011
+#define SSLOAD_T0   SSLOAD_X5
+#define SSPOPCHK_X1 .word 0b10000001110000001100000001110011
+#define SSPOPCHK_X5 .word 0b10000001110000101100000001110011
+#define SSPOPCHK_T0 SSPOPCHK_X5
+#define SSPINC(imm) .word (0b10000001110100000100000001110011 | ((imm & 0x1f) << 15))
+#define SSPUSH_X1   .word 0b10000010000100000100000001110011
+#define SSPUSH_X5   .word 0b10000010010100000100000001110011
+#define SSPUSH_T0   SSPUSH_X5
+#define SSAMOSWAP(rd, rs1, rs2) \
+  .word (0b10000010000000000100000001110011 | \
+         (rs2 << 20) | (rs1 << 15 ) | (rd << 7) \
+        )
 
 .macro PUSH_RESULT reg
     sw      \reg, offset(x1)
     .set    offset, (offset + 4)
-.endm
-
-.macro GOTO_MODE mode
-    .if ( \mode == M )
-        RVTEST_GOTO_MMODE
-    .else
-        RVTEST_GOTO_LOWER_MODE \mode
-    .endif
 .endm
 
 #ifdef TEST_CASE_1
@@ -71,37 +59,41 @@ RVTEST_CODE_BEGIN
 
     /* Init SSP */
     LA(     t0,ssp_top)
-    csrw ssp, t0
+    csrw CSR_SSP, t0
     
     /* Go to user mode and ensure that ops are no ops */
     RVTEST_GOTO_LOWER_MODE Umode
     li t0, 1
-    sspush t0
-    ssload t0
+	SSPUSH_X5
+	SSLOAD_X5
     PUSH_RESULT t0
-    sspinc 1
+	SSPINC(1)
     RVTEST_GOTO_MMODE
-    csrr t0, ssp
+    csrr t0, CSR_SSP
     PUSH_RESULT t0
     RVTEST_GOTO_LOWER_MODE Umode
 	li t0, 17
-    sspopchk t0
+	SSPOPCHK_X5
 
     RVTEST_GOTO_MMODE
 	/* Test in M Mode to ensure these ops perform as they should */
     li t0, 18
-    sspush t0
-    ssload t0
+	SSPUSH_X5
+	SSLOAD_X5
     PUSH_RESULT t0
-    sspinc 1
-    ssload t0
+	SSPINC(1)
+	SSLOAD_X5
     PUSH_RESULT t0
-    sspinc -1
+    csrr t0, CSR_SSP
+    addi t0, t0, (XLEN / -8)
+    csrw CSR_SSP, t0
     li t0, 18
-    sspopchk 
+    SSPOPCHK_X5
 	li t0, 19
     PUSH_RESULT t0
-    sspopchk  /* Should fault */
+    SSPOPCHK_X5  /* Should fault */
+	li t0, 0xdeaddead
+    PUSH_RESULT t0
 
     RVMODEL_IO_WRITE_STR(x30, "# Test part A - test minstret\n");
 
@@ -132,6 +124,11 @@ test_A_res:
 
 mtrap_sigptr:
     .fill 4, 4, 0xb01dface
+
+ssp_area:
+    .fill 10, 4, 0xcafe1123
+ssp_top:
+    .fill 1, 4, 0xcafe1124
 
 sig_end_canary:
 CANARY;
